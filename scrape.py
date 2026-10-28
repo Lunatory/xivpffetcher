@@ -20,6 +20,14 @@ JOB_CODES = {
     "BLU", "GNB", "DNC", "RPR", "SGE", "VPR", "PCT",
 }
 
+JOB_ROLES = {
+    "PLD": "🟦", "WAR": "🟦", "DRK": "🟦", "GNB": "🟦",
+    "WHM": "🟩", "SCH": "🟩", "AST": "🟩", "SGE": "🟩",
+    "MNK": "🟥", "DRG": "🟥", "NIN": "🟥", "SAM": "🟥",
+    "RPR": "🟥", "VPR": "🟥", "BRD": "🟥", "MCH": "🟥",
+    "DNC": "🟥", "BLM": "🟥", "SMN": "🟥", "RDM": "🟥",
+    "PCT": "🟥", "BLU": "🟥",
+}
 
 def text(node):
     return " ".join(node.stripped_strings) if node else ""
@@ -245,7 +253,7 @@ def discord_embed(listings):
             f'{listing["open"]} open / {listing["total"]} slots'
         )[:256]
 
-        jobs = ", ".join(listing["party_jobs"]) or "None listed"
+        jobs = " ".join(f'{job_roles.get(j, "⬜")} {j}' for j in listing["party_jobs"]) or "None listed"
         updated = discord_relative_timestamp(listing["updated_timestamp"])
         expires = discord_relative_timestamp(listing["expires_timestamp"])
 
