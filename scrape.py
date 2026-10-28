@@ -1,6 +1,8 @@
 
 import os
+import re
 import sys
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -17,6 +19,71 @@ def text(node):
     return " ".join(node.stripped_strings) if node else ""
 
 
+def parse_relative_timestamp(value, now=None, default_to_now=False):
+    """Convert XIVPF relative time text into an approximate Unix timestamp."""
+    if now is None:
+        now = time.time()
+
+    value = (value or "").strip().casefold()
+
+    if not value:
+        return int(now) if default_to_now else None
+
+    if value == "now":
+        return int(now)
+
+    if value in {"just now", "a moment ago"}:
+        return int(now)
+
+    match = re.search(
+        r"(?:in\s+)?(\d+)\s+"
+        r"(second|minute|hour|day|week|month|year)s?",
+        value,
+    )
+
+    if not match:
+        # Handle phrases such as "about a minute ago".
+        match = re.search(
+            r"(?:about\s+)?(?:in\s+)?a\s+"
+            r"(second|minute|hour|day|week|month|year)",
+            value,
+        )
+        if not match:
+            return int(now) if default_to_now else None
+
+        amount = 1
+        unit = match.group(1)
+    else:
+        amount = int(match.group(1))
+        unit = match.group(2)
+
+    seconds_per_unit = {
+        "second": 1,
+        "minute": 60,
+        "hour": 3600,
+        "day": 86400,
+        "week": 604800,
+        "month": 2592000,
+        "year": 31536000,
+    }
+
+    delta = amount * seconds_per_unit[unit]
+
+    if value.startswith("in "):
+        return int(now + delta)
+
+    # "12 seconds ago" or similar.
+    return int(now - delta)
+
+
+def discord_timestamp(timestamp):
+    """Discord renders this timestamp in each viewer's local time zone."""
+    if timestamp is None:
+        return "Unknown"
+
+    return f"<t:{int(timestamp)}:f>"
+
+
 def scrape():
     response = requests.get(
         LISTINGS_URL,
@@ -28,14 +95,14 @@ def scrape():
     soup = BeautifulSoup(response.text, "html.parser")
     cards = soup.select(".listing")
 
-    # Fail safely if the site returns unexpected HTML, rather than
-    # replacing the Discord feed with an incorrect empty result.
+    # Fail safely if the site returns unexpected HTML.
     if not cards:
         raise RuntimeError(
             "No listing cards found. Check the site response or HTML selectors."
         )
 
     results = []
+    scrape_time = time.time()
 
     for card in cards:
         # Data centre filter
@@ -100,37 +167,65 @@ def scrape():
             continue
 
         # Filter by minimum item level.
-        # If no minimum item level is set, keep the listing.
+        # Missing or unset item levels are allowed.
         min_ilvl = text(card.select_one(".middle .stat .value"))
         ilvl_digits = "".join(c for c in min_ilvl if c.isdigit())
 
         if ilvl_digits and int(ilvl_digits) > MAX_ILVL:
             continue
 
+        # Only filled slots have a specific job abbreviation in their title.
+        # Empty slots list possible jobs, not a job currently in the party.
+        party_jobs = []
+
+        for slot in slots:
+            if "filled" not in slot.get("class", []):
+                continue
+
+            job = (slot.get("title") or "").strip().upper()
+
+            # Fallback to the SVG icon reference, if available.
+            if not job:
+                icon = slot.select_one("use[href], use[xlink:href]")
+                if icon:
+                    href = (
+                        icon.get("href")
+                        or icon.get("xlink:href")
+                        or ""
+                    )
+                    job = href.rsplit("#", 1)[-1].upper()
+
+            if job:
+                party_jobs.append(job)
+
         creator = text(card.select_one(".creator .text")) or "Unknown"
         description = (
             text(card.select_one(".description")) or "No description"
         )
-        updated = text(card.select_one(".updated .text")) or "Unknown"
-        expires = text(card.select_one(".expires .text")) or "Unknown"
 
-        # The public markup may not expose a direct listing URL.
-        # Link to the public listings page as a safe fallback.
-        listing_id = card.get("data-id")
-        url = LISTINGS_URL
+        updated_text = text(card.select_one(".updated .text"))
+        expires_text = text(card.select_one(".expires .text"))
 
-        if listing_id:
-            url = f"{LISTINGS_URL}#listing-{listing_id}"
+        updated_timestamp = parse_relative_timestamp(
+            updated_text,
+            now=scrape_time,
+            default_to_now=True,
+        )
+        expires_timestamp = parse_relative_timestamp(
+            expires_text,
+            now=scrape_time,
+            default_to_now=False,
+        )
 
         results.append({
             "duty": duty_name,
             "creator": creator,
             "description": description,
+            "party_jobs": party_jobs,
             "total": len(slots),
             "open": len(open_slots),
-            "updated": updated,
-            "expires": expires,
-            "url": url,
+            "updated_timestamp": updated_timestamp,
+            "expires_timestamp": expires_timestamp,
         })
 
     return results
@@ -141,7 +236,6 @@ def discord_embed(listings):
 
     embed = {
         "title": "Dancing Mad — Aether Party Finder",
-        "url": LISTINGS_URL,
         "color": 0x8B0000,
         "timestamp": now,
         "footer": {
@@ -171,17 +265,21 @@ def discord_embed(listings):
             f'{listing["open"]} open / {listing["total"]} slots'
         )[:256]
 
+        jobs = ", ".join(listing["party_jobs"]) or "None listed"
+
+        updated = discord_timestamp(listing["updated_timestamp"])
+        expires = discord_timestamp(listing["expires_timestamp"])
+
         value = (
+            f'**Party jobs:** {jobs}\n'
             f'**Description:** {listing["description"]}\n'
-            f'**Updated:** {listing["updated"]} · '
-            f'**Expires:** {listing["expires"]}\n'
-            f'[View XIVPF listings]({listing["url"]})'
+            f'**Updated:** {updated}\n'
+            f'**Expires:** {expires}'
         )[:1024]
 
         cost = len(name) + len(value)
 
-        # Discord allows up to 25 fields per embed and 6000 combined
-        # characters across the embed.
+        # Discord allows up to 25 fields and 6000 combined embed characters.
         if len(fields) >= 25 or total_chars + cost > 5700:
             omitted += 1
             continue
