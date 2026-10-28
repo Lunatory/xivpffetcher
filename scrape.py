@@ -184,53 +184,54 @@ def get_filled_jobs(slots):
     )
 
 
-def get_party_state(slots):
-    """
-    Render one symbol per party slot in XIVPF's slot order.
 
-    Filled slots use colored circles. Open slots use colored squares.
-    If an open slot can accept jobs from multiple color categories,
-    show a black square instead.
-    """
-    state = []
+def get_party_state(slots):
+    """Render role-sorted party state: open squares, filled circles."""
+    entries = []
 
     for slot in slots:
-        codes = slot_job_codes(slot)
         filled = "filled" in slot.get("class", [])
+        codes = slot_job_codes(slot)
 
         if filled:
+            # Use the actual job, not the slot's original role color.
             job = next(
                 (code for code in codes if job_category(code)),
                 None,
             )
             category = job_category(job) if job else None
 
-            if category:
-                state.append(FILLED_SYMBOLS[category])
-            else:
-                # A filled slot whose job cannot be identified.
-                state.append("⚫")
-
-            continue
-
-        # Open slot: infer which role categories it accepts.
-        categories = {
-            job_category(code)
-            for code in codes
-            if job_category(code)
-        }
-
-        if len(categories) == 1:
-            category = next(iter(categories))
-            state.append(OPEN_SYMBOLS[category])
-        elif len(categories) > 1:
-            # Multiple possible colors/categories.
-            state.append("⬛")
+            # If the job is not identifiable, retain it as an unknown
+            # filled slot rather than showing a black circle.
+            symbol = FILLED_SYMBOLS.get(category, "⚪")
+            order = ROLE_ORDER.get(job, 99) if job else 99
         else:
-            # No readable job options in the source markup.
-            state.append("⬛")
+            categories = {
+                job_category(code)
+                for code in codes
+                if job_category(code)
+            }
 
-    return " ".join(state) if state else "Unknown"
+            if len(categories) == 1:
+                category = next(iter(categories))
+                symbol = OPEN_SYMBOLS[category]
+                order = min(
+                    ROLE_ORDER.get(code, 99)
+                    for code in codes
+                    if job_category(code) == category
+                )
+            else:
+                # Multiple possible categories, or unavailable options.
+                symbol = "⬛"
+                order = min(
+                    (ROLE_ORDER.get(code, 99) for code in codes),
+                    default=99,
+                )
+
+        entries.append((order, len(entries), symbol))
+
+    entries.sort(key=lambda entry: (entry[0], entry[1]))
+    return "".join(entry[2] for entry in entries) or "Unknown"
 
 
 def is_private_listing(card):
@@ -371,10 +372,14 @@ def discord_embed(listings):
     omitted = 0
 
     for listing in listings:
-        name = (
-            f'{listing["creator"]} — '
-            f'{listing["open"]} open / {listing["total"]} slots'
-        )[:256]
+        if listing["total"] == 8:
+            name = f'{listing["creator"]} — {listing["open"]} open'
+        else:
+            name = (
+                f'{listing["creator"]} — '
+                f'{listing["open"]} open / {listing["total"]} slots'
+            )
+        name = name[:256]
 
         jobs = ", ".join(listing["party_jobs"]) or "None listed"
         party_state = listing["party_state"]
