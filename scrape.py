@@ -13,30 +13,56 @@ CENTRE = os.getenv("XIVPF_CENTRE", "Aether").casefold()
 MIN_SLOTS = int(os.getenv("XIVPF_MIN_SLOTS", "6"))
 MAX_ILVL = 790
 
-JOB_CODES = {
-    "GLA", "PGL", "MRD", "LNC", "ARC", "CNJ", "THM", "ACN",
-    "PLD", "MNK", "WAR", "DRG", "BRD", "WHM", "BLM", "SMN",
-    "SCH", "ROG", "NIN", "MCH", "DRK", "AST", "SAM", "RDM",
-    "BLU", "GNB", "DNC", "RPR", "SGE", "VPR", "PCT",
+# Job categories and party-state colors.
+TANKS = {"PLD", "WAR", "DRK", "GNB"}
+HEALERS = {"WHM", "SCH", "AST", "SGE"}
+MELEE = {"MNK", "DRG", "NIN", "SAM", "RPR", "VPR"}
+RANGED = {"BRD", "MCH", "DNC"}
+CASTERS = {"BLM", "SMN", "RDM", "PCT", "BLU"}
+
+JOB_CODES = (
+    TANKS | HEALERS | MELEE | RANGED | CASTERS
+    | {
+        "GLA", "PGL", "MRD", "LNC", "ARC", "CNJ",
+        "THM", "ACN", "ROG",
+    }
+)
+
+ROLE_ORDER = {
+    **{job: 0 for job in TANKS},
+    **{job: 1 for job in HEALERS},
+    **{job: 2 for job in MELEE},
+    **{job: 3 for job in CASTERS},
+    **{job: 4 for job in RANGED},
 }
 
-job_roles = {
-    "PLD": "🟦", "WAR": "🟦", "DRK": "🟦", "GNB": "🟦",
-    "WHM": "🟩", "SCH": "🟩", "AST": "🟩", "SGE": "🟩",
-    "MNK": "🟥", "DRG": "🟥", "NIN": "🟥", "SAM": "🟥",
-    "RPR": "🟥", "VPR": "🟥", "BRD": "🟥", "MCH": "🟥",
-    "DNC": "🟥", "BLM": "🟥", "SMN": "🟥", "RDM": "🟥",
-    "PCT": "🟥", "BLU": "🟥",
+# Circle = filled slot; square = open slot.
+ROLE_SYMBOLS = {
+    "tank": ("🟦", "🟦"),
+    "healer": ("🟩", "🟩"),
+    "melee": ("🟥", "🟥"),
+    "caster": ("🟪", "🟪"),
+    "ranged": ("🟠", "🟠"),
 }
 
-role_order = {
-    "PLD": 0, "WAR": 0, "DRK": 0, "GNB": 0,
-    "WHM": 1, "SCH": 1, "AST": 1, "SGE": 1,
-    "MNK": 2, "DRG": 2, "NIN": 2, "SAM": 2,
-    "RPR": 2, "VPR": 2, "BRD": 2, "MCH": 2,
-    "DNC": 2, "BLM": 2, "SMN": 2, "RDM": 2,
-    "PCT": 2, "BLU": 2,
+# The requested symbols are visually identical in color for filled
+# and open slots, so use the symbol shape to distinguish them.
+FILLED_SYMBOLS = {
+    "tank": "🔵",
+    "healer": "🟢",
+    "melee": "🔴",
+    "caster": "🟣",
+    "ranged": "🟠",
 }
+
+OPEN_SYMBOLS = {
+    "tank": "🟦",
+    "healer": "🟩",
+    "melee": "🟥",
+    "caster": "🟪",
+    "ranged": "🟧",
+}
+
 
 def text(node):
     return " ".join(node.stripped_strings) if node else ""
@@ -87,37 +113,124 @@ def parse_relative_timestamp(value, now=None):
 
 
 def discord_relative_timestamp(timestamp):
-    """Discord's relative timestamp is localized for each viewer."""
+    """Discord localizes relative timestamps for each viewer."""
     if timestamp is None:
         return "Unknown"
 
     return f"<t:{int(timestamp)}:R>"
 
 
+def job_category(job):
+    """Return the display category for a job abbreviation."""
+    if job in TANKS:
+        return "tank"
+    if job in HEALERS:
+        return "healer"
+    if job in MELEE:
+        return "melee"
+    if job in CASTERS:
+        return "caster"
+    if job in RANGED:
+        return "ranged"
+    return None
+
+
+def extract_job_codes(value):
+    """Extract recognized job codes from titles or icon identifiers."""
+    value = (value or "").upper()
+    candidates = re.findall(r"[A-Z]{3}", value)
+    return list(dict.fromkeys(
+        code for code in candidates if code in JOB_CODES
+    ))
+
+
+def slot_job_codes(slot):
+    """Find job codes exposed by a slot's title or SVG icon."""
+    values = [
+        slot.get("title", ""),
+        slot.get("aria-label", ""),
+        slot.get("data-job", ""),
+        slot.get("data-jobs", ""),
+    ]
+
+    for icon in slot.select("use[href], use[xlink\\:href]"):
+        values.append(icon.get("href", ""))
+        values.append(icon.get("xlink:href", ""))
+
+    jobs = []
+    for value in values:
+        jobs.extend(extract_job_codes(value))
+
+    return list(dict.fromkeys(jobs))
+
+
 def get_filled_jobs(slots):
-    """Read job abbreviations from occupied party slots only."""
+    """Read job abbreviations from occupied slots only."""
     jobs = []
 
     for slot in slots:
         if "filled" not in slot.get("class", []):
             continue
 
-        job = (slot.get("title") or "").strip().upper()
+        codes = slot_job_codes(slot)
+        if codes:
+            # Occupied slots should represent one current job.
+            jobs.append(codes[0])
 
-        # Fallback to the icon identifier if the title is unavailable.
-        if not job:
-            icon = slot.select_one("use[href], use[xlink\\:href]")
-            if icon:
-                href = icon.get("href") or icon.get("xlink:href") or ""
-                job = href.rsplit("#", 1)[-1].upper()
+    # Tanks, healers, melee, casters, then physical ranged.
+    return sorted(
+        jobs,
+        key=lambda job: (ROLE_ORDER.get(job, 99), job),
+    )
 
-        # Keep recognized job codes only.
-        for code in job.split():
-            if code in JOB_CODES:
-                jobs.append(code)
-                break
 
-    return jobs
+def get_party_state(slots):
+    """
+    Render one symbol per party slot in XIVPF's slot order.
+
+    Filled slots use colored circles. Open slots use colored squares.
+    If an open slot can accept jobs from multiple color categories,
+    show a black square instead.
+    """
+    state = []
+
+    for slot in slots:
+        codes = slot_job_codes(slot)
+        filled = "filled" in slot.get("class", [])
+
+        if filled:
+            job = next(
+                (code for code in codes if job_category(code)),
+                None,
+            )
+            category = job_category(job) if job else None
+
+            if category:
+                state.append(FILLED_SYMBOLS[category])
+            else:
+                # A filled slot whose job cannot be identified.
+                state.append("⚫")
+
+            continue
+
+        # Open slot: infer which role categories it accepts.
+        categories = {
+            job_category(code)
+            for code in codes
+            if job_category(code)
+        }
+
+        if len(categories) == 1:
+            category = next(iter(categories))
+            state.append(OPEN_SYMBOLS[category])
+        elif len(categories) > 1:
+            # Multiple possible colors/categories.
+            state.append("⬛")
+        else:
+            # No readable job options in the source markup.
+            state.append("⬛")
+
+    return " ".join(state) if state else "Unknown"
 
 
 def is_private_listing(card):
@@ -125,7 +238,8 @@ def is_private_listing(card):
     nodes = [
         card,
         *card.select(
-            "[data-private], [data-is-private], [class], [title], [aria-label]"
+            "[data-private], [data-is-private], [class], [title], "
+            "[aria-label]"
         ),
     ]
 
@@ -206,8 +320,7 @@ def scrape():
             text(card.select_one(".description")) or "No description"
         )
 
-        # XIVPF provides relative "updated" and "expires" values.
-        # It does not expose an actual creation timestamp in the sample markup.
+        # XIVPF exposes relative update/expiry text, not creation timestamps.
         updated_text = text(card.select_one(".updated .text"))
         expires_text = text(card.select_one(".expires .text"))
 
@@ -222,6 +335,7 @@ def scrape():
             "creator": creator,
             "description": description,
             "party_jobs": get_filled_jobs(slots),
+            "party_state": get_party_state(slots),
             "total": len(slots),
             "open": len(open_slots),
             "updated_timestamp": updated_timestamp,
@@ -262,13 +376,14 @@ def discord_embed(listings):
             f'{listing["open"]} open / {listing["total"]} slots'
         )[:256]
 
-        sorted_jobs = sorted(listing["party_jobs"], key=lambda j: role_order.get(j, 3))
-        jobs = " ".join(f'{job_roles.get(j, "⬜")} {j}' for j in sorted_jobs) or "None listed"
+        jobs = ", ".join(listing["party_jobs"]) or "None listed"
+        party_state = listing["party_state"]
         updated = discord_relative_timestamp(listing["updated_timestamp"])
         expires = discord_relative_timestamp(listing["expires_timestamp"])
 
         value = (
             f"**Party jobs:** {jobs}\n"
+            f"**Party state:** {party_state}\n"
             f"**Description:** {listing['description']}\n"
             f"**Updated:** {updated}\n"
             f"**Expires:** {expires}"
