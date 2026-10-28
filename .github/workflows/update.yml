@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Refresh Discord feed
+      - name: Refresh Discord message
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_MESSAGE_ID: ${{ vars.DISCORD_MESSAGE_ID }}
