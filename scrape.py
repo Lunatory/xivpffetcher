@@ -275,8 +275,7 @@ def discord_embed(listings):
         value = (
             f"**Party jobs:** {jobs}\n"
             f"**Description:** {listing['description']}\n"
-            f"**Updated:** {updated}\n"
-            f"**Expires:** {expires}"
+            f"**Updated:** {updated} | **Expires:** {expires}"
         )[:1024]
 
         cost = len(name) + len(value)
