@@ -203,8 +203,16 @@ def scrape():
             text(card.select_one(".description")) or "No description"
         )
 
-        updated_text = text(card.select_one(".updated .text"))
-        expires_text = text(card.select_one(".expires .text"))
+updated = (
+    f'<t:{listing["updated_timestamp"]}:R>'
+    if listing["updated_timestamp"] is not None
+    else "Unknown"
+)
+expires = (
+    f'<t:{listing["expires_timestamp"]}:R>'
+    if listing["expires_timestamp"] is not None
+    else "Unknown"
+)
 
         updated_timestamp = parse_relative_timestamp(
             updated_text,
@@ -270,12 +278,12 @@ def discord_embed(listings):
         updated = discord_timestamp(listing["updated_timestamp"])
         expires = discord_timestamp(listing["expires_timestamp"])
 
-        value = (
-            f'**Party jobs:** {jobs}\n'
-            f'**Description:** {listing["description"]}\n'
-            f'**Updated:** {updated}\n'
-            f'**Expires:** {expires}'
-        )[:1024]
+value = (
+    f'**Party jobs:** {jobs}\n'
+    f'**Description:** {listing["description"]}\n'
+    f'**Created:** {updated}\n'
+    f'**Expires:** {expires}'
+)[:1024]
 
         cost = len(name) + len(value)
 
