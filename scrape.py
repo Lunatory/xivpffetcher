@@ -20,13 +20,22 @@ JOB_CODES = {
     "BLU", "GNB", "DNC", "RPR", "SGE", "VPR", "PCT",
 }
 
-JOB_ROLES = {
+job_roles = {
     "PLD": "🟦", "WAR": "🟦", "DRK": "🟦", "GNB": "🟦",
     "WHM": "🟩", "SCH": "🟩", "AST": "🟩", "SGE": "🟩",
     "MNK": "🟥", "DRG": "🟥", "NIN": "🟥", "SAM": "🟥",
     "RPR": "🟥", "VPR": "🟥", "BRD": "🟥", "MCH": "🟥",
     "DNC": "🟥", "BLM": "🟥", "SMN": "🟥", "RDM": "🟥",
     "PCT": "🟥", "BLU": "🟥",
+}
+
+role_order = {
+    "PLD": 0, "WAR": 0, "DRK": 0, "GNB": 0,
+    "WHM": 1, "SCH": 1, "AST": 1, "SGE": 1,
+    "MNK": 2, "DRG": 2, "NIN": 2, "SAM": 2,
+    "RPR": 2, "VPR": 2, "BRD": 2, "MCH": 2,
+    "DNC": 2, "BLM": 2, "SMN": 2, "RDM": 2,
+    "PCT": 2, "BLU": 2,
 }
 
 def text(node):
@@ -253,7 +262,8 @@ def discord_embed(listings):
             f'{listing["open"]} open / {listing["total"]} slots'
         )[:256]
 
-        jobs = " ".join(f'{job_roles.get(j, "⬜")} {j}' for j in listing["party_jobs"]) or "None listed"
+        sorted_jobs = sorted(listing["party_jobs"], key=lambda j: role_order.get(j, 3))
+        jobs = " ".join(f'{job_roles.get(j, "⬜")} {j}' for j in sorted_jobs) or "None listed"
         updated = discord_relative_timestamp(listing["updated_timestamp"])
         expires = discord_relative_timestamp(listing["expires_timestamp"])
 
