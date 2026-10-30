@@ -235,21 +235,20 @@ def discord_embed(listings, last_updated):
     embed = {
         "title": "Dancing Mad — Aether Party Finder",
         "color": 0x8B0000,
-            "footer": {
-                "text": f"XIVPF feed • Last updated <t:{last_updated}:R>"
-            },
     }
 
     if not listings:
         embed["description"] = (
             "No matching public, actively recruiting listings right now.\n\n"
             "Filters: Aether • Dancing Mad • at least 6 total slots • "
-            "at least 1 open slot • minimum iLvl 790 or lower, if set."
+            "at least 1 open slot • minimum iLvl 790 or lower, if set.\n"
+            f"Last updated: <t:{last_updated}:R>"
         )
         return embed
 
     embed["description"] = (
-        f"Currently matching: **{len(listings)}** listing(s)."
+        f"Currently matching: **{len(listings)}** listing(s).\n"
+        f"Last updated: <t:{last_updated}:R>"
     )
 
     fields = []
