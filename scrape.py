@@ -288,17 +288,19 @@ def discord_embed(listings, last_updated):
         })
         total_chars += cost
 
-    embed["fields"] = fields
-
     if omitted:
         embed["description"] += (
             f"\n\n**Warning:** {omitted} additional matches could not fit "
             "in this embed."
         )
-        
-    embed["description"] += (
-        f"\n\nLast updated: <t:{last_updated}:R>"
-    )
+
+    fields.append({
+        "name": "\u200b",
+        "value": f"Last updated: <t:{last_updated}:R>",
+        "inline": False,
+    })
+    
+    embed["fields"] = fields
     return embed
 
 
