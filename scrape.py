@@ -228,7 +228,7 @@ def scrape():
             "expires_timestamp": expires_timestamp,
         })
 
-    return results
+    return results, int(scrape_time)
 
 
 def discord_embed(listings, last_updated):
@@ -236,7 +236,7 @@ def discord_embed(listings, last_updated):
         "title": "Dancing Mad — Aether Party Finder",
         "color": 0x8B0000,
             "footer": {
-                "text": f"XIVPF feed • Last updated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(last_updated))}"
+                "text": f"XIVPF feed • Last updated <t:{last_updated}:R>"
             },
     }
 
@@ -310,7 +310,7 @@ def main():
         raise RuntimeError("DISCORD_WEBHOOK_URL secret is missing.")
 
     last_updated = time.time()
-    listings = scrape()
+    listings, last_updated = scrape()
     embed = discord_embed(listings, last_updated)
     
     if message_id:
