@@ -241,14 +241,12 @@ def discord_embed(listings, last_updated):
         embed["description"] = (
             "No matching public, actively recruiting listings right now.\n\n"
             "Filters: Aether • Dancing Mad • at least 6 total slots • "
-            "at least 1 open slot • minimum iLvl 790 or lower, if set.\n"
-            f"Last updated: <t:{last_updated}:R>"
+            "at least 1 open slot • minimum iLvl 790 or lower, if set."
         )
         return embed
 
     embed["description"] = (
-        f"Currently matching: **{len(listings)}** listing(s).\n"
-        f"Last updated: <t:{last_updated}:R>"
+        f"Currently matching: **{len(listings)}** listing(s)."
     )
 
     fields = []
@@ -297,7 +295,10 @@ def discord_embed(listings, last_updated):
             f"\n\n**Warning:** {omitted} additional matches could not fit "
             "in this embed."
         )
-
+        
+    embed["description"] += (
+        f"\n\nLast updated: <t:{last_updated}:R>"
+    )
     return embed
 
 
