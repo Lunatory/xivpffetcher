@@ -235,9 +235,9 @@ def discord_embed(listings, last_updated):
     embed = {
         "title": "Dancing Mad — Aether Party Finder",
         "color": 0x8B0000,
-        "footer": {
-            "text": f"XIVPF feed • Last updated: <t:{int(last_updated)}:f>"
-        },
+            "footer": {
+                "text": f"XIVPF feed • Last updated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(last_updated))}"
+            },
     }
 
     if not listings:
