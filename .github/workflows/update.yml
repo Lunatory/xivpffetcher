@@ -32,10 +32,10 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Refresh Discord message
+      - name: Refresh Discord Feed
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          DISCORD_MESSAGE_ID: ${{ vars.DISCORD_MESSAGE_ID }}
+          DISCORD_MESSAGE_ID: ${{ vars.DISCORD_MESSAGE_IDS }}
           XIVPF_DUTY: "Dancing Mad"
           XIVPF_CENTRE: "Aether"
           XIVPF_MIN_SLOTS: "6"
